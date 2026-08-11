@@ -56,6 +56,8 @@ function loadData() {
                 ? JSON.parse(savedSubjects)
                 : [];
 
+        renderStudyDays();
+
 
         subjects.forEach(function (subject) {
 
@@ -355,6 +357,7 @@ function showDashboard() {
 
 
     renderSubjects();
+    renderStudyDays();
 
 
     closeSidebarOnMobile();
@@ -1177,73 +1180,105 @@ function savePDF() {
    ========================================================= */
 
 function localFileSearch() {
-
     showModal(`
-
-        <h2>
-            📁 Find Local PDF
-        </h2>
-
-        <p style="
-            color:#777;
-            font-size:13px;
-            line-height:1.6;
-            margin-bottom:15px;
-        ">
-
-            Select a PDF from your computer or phone.
-
-            <br><br>
-
-            Save it to keep it permanently
-            inside this subject.
-
-        </p>
-
-        <input
-            type="file"
-            id="localPDF"
-            accept=".pdf,application/pdf"
-        >
-
-        <br><br>
-
-        <button
-            class="modal-action"
-            onclick="saveSelectedPDF()">
-
-            💾 Save PDF
-
-        </button>
-
-        <br><br>
-
-        <button
-            class="modal-action"
-            onclick="openSelectedPDF()">
-
-            📖 Open PDF
-
-        </button>
-
-        <br><br>
-
-        <button
-            class="back-btn"
-            style="width:100%;"
-            onclick="backFromPDFSearch()">
-
-            ← Back
-
-        </button>
-
+        <h2>📁 Choose Local PDF</h2>
+        <p style="color:#777;font-size:13px;line-height:1.6;margin-bottom:15px;">Choose a PDF from your phone or computer.</p>
+        <input type="file" id="localPDF" accept=".pdf,application/pdf" onchange="localPDFSelected()">
+        <div id="localPDFActions" style="margin-top:15px;">
+            <p style="color:#888;font-size:13px;text-align:center;">Select a PDF to see the available actions.</p>
+        </div>
     `);
+    setTimeout(function () { const input = getElement("localPDF"); if (input) input.click(); }, 100);
+}
 
+function localPDFSelected() {
+    const input = getElement("localPDF");
+    const actions = getElement("localPDFActions");
+    if (!input || !actions || !input.files || !input.files.length) return;
+    const file = input.files[0];
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) { alert("Please select a PDF file."); input.value = ""; return; }
+    // Keep the selected File object available so mobile browsers can
+    // offer their native share/open-with sheet when supported.
+    window.studyBookSelectedLocalPDF = file;
+
+    actions.innerHTML = `
+        <p style="font-size:13px;line-height:1.5;margin-bottom:12px;"><strong>Selected:</strong><br>${escapeHTML(file.name)}</p>
+        <button class="modal-action" onclick="saveSelectedPDF()">💾 Save PDF</button><br><br>
+        <button class="modal-action" onclick="openSelectedPDF()">📖 Open PDF</button><br><br>
+        <button class="modal-action" onclick="openPDFWithOtherApp()">📤 Open with Drive / Other App</button><br><br>
+        <button class="back-btn" style="width:100%;" onclick="backFromPDFSearch()">← Back</button>
+    `;
+}
+
+
+async function openPDFWithOtherApp() {
+
+    const file = window.studyBookSelectedLocalPDF;
+
+    if (!file) {
+        alert("Please select a PDF first.");
+        return;
+    }
+
+    /*
+       On supported mobile browsers, Web Share with files opens the
+       phone's native share/open-with sheet. This is the closest a
+       website can get to showing EVERY installed PDF reader. The OS
+       decides which apps appear, so Drive, Files, Acrobat, Xodo,
+       WPS, Samsung PDF viewer and other installed readers can appear
+       when they support receiving PDF files.
+    */
+    try {
+        if (navigator.share && navigator.canShare &&
+            navigator.canShare({ files: [file] })) {
+
+            await navigator.share({
+                title: file.name,
+                files: [file]
+            });
+
+            return;
+        }
+    } catch (error) {
+        if (error && error.name === "AbortError") {
+            return;
+        }
+        console.warn("Native PDF app chooser unavailable:", error);
+    }
+
+    /*
+       Fallback for browsers without file sharing support. Opening the
+       PDF in a separate browser tab lets the mobile OS/browser provide
+       its own PDF handling options where available.
+    */
+    const fileURL = URL.createObjectURL(file);
+    window.studyBookCurrentPDFURL = fileURL;
+
+    const opened = window.open(fileURL, "_blank");
+
+    if (!opened) {
+        showModal(`
+            <h2>📄 ${escapeHTML(file.name)}</h2>
+            <p style="color:#777;font-size:13px;line-height:1.6;">
+                Your browser does not provide an app chooser here.
+                Use the button below to open the PDF.
+            </p>
+            <a href="${escapeAttribute(fileURL)}" target="_blank" rel="noopener"
+               class="modal-action" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;">
+                📖 Open PDF
+            </a>
+            <br>
+            <button class="back-btn" style="width:100%;" onclick="backFromPDFSearch()">
+                ← Back
+            </button>
+        `);
+    }
 }
 
 
 function backFromPDFSearch() {
 
+    window.studyBookSelectedLocalPDF = null;
     closeModal();
 
 }
@@ -1475,69 +1510,74 @@ async function openSavedPDF(pdfId) {
    PDF VIEWER
    ========================================================= */
 
-function showPDFViewer(
-    fileURL,
-    fileName
-) {
+function showPDFViewer(fileURL, fileName) {
 
-    showModal(`
+    const isMobile = /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent);
 
-        <div style="
-            display:flex;
-            align-items:center;
-            justify-content:space-between;
-            gap:10px;
-            margin-bottom:15px;
-        ">
+    window.studyBookCurrentPDFURL = fileURL;
 
-            <h2 style="
-                margin:0;
-                font-size:18px;
-                word-break:break-word;
-            ">
+    if (isMobile) {
+        // Mobile browsers handle a direct PDF tab much better than an iframe.
+        // Keep the current StudyBook modal open underneath so pressing Back
+        // from the PDF/browser returns the user to the same place.
+        const pdfWindow = window.open(fileURL, "_blank");
 
-                📄
+        if (pdfWindow) {
+            return;
+        }
 
-                ${escapeHTML(
-                    fileName
-                )}
-
-            </h2>
-
-
-            <button
-                class="back-btn"
-                onclick="closePDFViewer()">
-
+        // Fallback when the browser blocks the new tab.
+        showModal(`
+            <h2>📄 ${escapeHTML(fileName)}</h2>
+            <p style="color:#777;font-size:13px;line-height:1.6;">
+                Tap below to open the PDF in your mobile browser.
+            </p>
+            <a
+                href="${escapeAttribute(fileURL)}"
+                target="_blank"
+                rel="noopener"
+                class="modal-action"
+                style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;">
+                📖 Open PDF
+            </a>
+            <br>
+            <button class="back-btn" style="width:100%;" onclick="closePDFViewer()">
                 ← Back
-
             </button>
+        `);
 
+        return;
+    }
+
+    // Desktop keeps the existing in-app PDF viewer.
+    showModal(`
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:15px;">
+            <h2 style="margin:0;font-size:18px;word-break:break-word;">📄 ${escapeHTML(fileName)}</h2>
+            <button class="back-btn" onclick="closePDFViewer()">← Back</button>
         </div>
-
 
         <iframe
             src="${escapeAttribute(fileURL)}"
-            style="
-                width:100%;
-                height:70vh;
-                min-height:400px;
-                border:1px solid #ddd;
-                border-radius:12px;
-                background:white;
-            "
+            title="${escapeAttribute(fileName)}"
+            style="width:100%;height:70vh;min-height:400px;border:1px solid #ddd;border-radius:12px;background:white;"
         ></iframe>
 
+        <div style="margin-top:10px;text-align:center;">
+            <a
+                href="${escapeAttribute(fileURL)}"
+                target="_blank"
+                rel="noopener"
+                style="display:inline-block;padding:10px 14px;border-radius:10px;background:#f1f3f8;color:#333;text-decoration:none;font-weight:600;">
+                📖 Open PDF in Browser
+            </a>
+        </div>
     `);
-
-
-    window.studyBookCurrentPDFURL =
-        fileURL;
-
 }
 
 
 function closePDFViewer() {
+
+    window.studyBookSelectedLocalPDF = null;
 
     if (
         window.studyBookCurrentPDFURL
@@ -2089,86 +2129,35 @@ function addAdvice() {
 }
 
 
-function addImportantItem(
-    type,
-    placeholder
-) {
-
+function addImportantItem(type, placeholder) {
+    if (type === "CT") {
+        showModal(`
+            <h2>📅 CT Date</h2>
+            <p style="color:#777;font-size:13px;line-height:1.5;">Select the CT date from the calendar.</p>
+            <input type="date" id="importantDate" aria-label="CT date">
+            <textarea id="importantText" placeholder="Optional note for this CT..."></textarea>
+            <button class="modal-action" onclick="saveImportantItem('CT')">Save CT Date</button>
+        `);
+        return;
+    }
     showModal(`
-
-        <h2>
-            ${type}
-        </h2>
-
-        <textarea
-            id="importantText"
-            placeholder="${placeholder}">
-        </textarea>
-
-        <button
-            class="modal-action"
-            onclick="
-                saveImportantItem(
-                    '${type}'
-                )
-            ">
-
-            Save
-
-        </button>
-
+        <h2>${type}</h2>
+        <textarea id="importantText" placeholder="${placeholder}"></textarea>
+        <button class="modal-action" onclick="saveImportantItem('${type}')">Save</button>
     `);
-
 }
 
-
 function saveImportantItem(type) {
-
-    const text =
-        getElement("importantText")
-            .value
-            .trim();
-
-
-    if (!text) {
-
-        alert(
-            "Please enter something."
-        );
-
-        return;
-
-    }
-
-
-    const subject =
-        getCurrentSubject();
-
-
+    const textElement = getElement("importantText");
+    const dateElement = getElement("importantDate");
+    const text = textElement ? textElement.value.trim() : "";
+    const date = dateElement ? dateElement.value : "";
+    if (type === "CT" && !date) { alert("Please select the CT date."); return; }
+    if (type !== "CT" && !text) { alert("Please enter something."); return; }
+    const subject = getCurrentSubject();
     if (!subject) return;
-
-
-    subject.important.push({
-
-        id: Date.now(),
-
-        type: type,
-
-        text: text
-
-    });
-
-
-    saveData();
-
-
-    closeModal();
-
-
-    renderImportant(
-        subject
-    );
-
+    subject.important.push({ id: Date.now(), type: type, text: text, date: date });
+    saveData(); closeModal(); renderImportant(subject);
 }
 
 
@@ -2247,11 +2236,7 @@ function renderImportant(subject) {
 
 
                 <span>
-
-                    ${escapeHTML(
-                        item.text
-                    )}
-
+                    ${item.date ? `📅 ${escapeHTML(formatStudyDate(item.date))}${item.text ? ` — ${escapeHTML(item.text)}` : ""}` : escapeHTML(item.text)}
                 </span>
 
             `;
@@ -2622,6 +2607,45 @@ function exitStudyBook() {
 
     showNewUser();
 
+}
+
+
+/* =========================================================
+   STUDY CALENDAR / NOTE OF THIS DAY
+   ========================================================= */
+
+function getStudyDays() {
+    try { const saved = localStorage.getItem("studybook_study_days"); return saved ? JSON.parse(saved) : []; }
+    catch (error) { console.error("Could not load study days:", error); return []; }
+}
+
+function saveStudyDay() {
+    const dateInput = getElement("plannerDate"), noteInput = getElement("plannerNote");
+    const date = dateInput ? dateInput.value : "", note = noteInput ? noteInput.value.trim() : "";
+    if (!date) { alert("Please select a date."); return; }
+    if (!note) { alert("Please write a note for this day."); return; }
+    const days = getStudyDays(); days.push({ id: Date.now(), date: date, note: note });
+    days.sort(function(a,b){ return a.date.localeCompare(b.date); });
+    localStorage.setItem("studybook_study_days", JSON.stringify(days));
+    dateInput.value = ""; noteInput.value = ""; renderStudyDays();
+}
+
+function deleteStudyDay(id) {
+    const days = getStudyDays().filter(function(item){ return item.id !== id; });
+    localStorage.setItem("studybook_study_days", JSON.stringify(days)); renderStudyDays();
+}
+
+function formatStudyDate(dateString) {
+    if (!dateString) return ""; const p = dateString.split("-"); if (p.length !== 3) return dateString;
+    const date = new Date(Number(p[0]), Number(p[1])-1, Number(p[2]));
+    return date.toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"});
+}
+
+function renderStudyDays() {
+    const list = getElement("studyDayList"); if (!list) return; const days = getStudyDays();
+    if (!days.length) { list.innerHTML = `<p style="font-size:12px;color:#888;text-align:center;padding:10px;">No important dates saved yet.</p>`; return; }
+    list.innerHTML = days.map(function(item){ return `
+        <div class="study-day-item"><div class="study-day-info"><strong>📅 ${escapeHTML(formatStudyDate(item.date))}</strong><span>📝 ${escapeHTML(item.note)}</span></div><button class="study-day-delete" onclick="deleteStudyDay(${item.id})" aria-label="Delete note">×</button></div>`; }).join("");
 }
 
 
