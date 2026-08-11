@@ -503,6 +503,28 @@ body {
     cursor: pointer;
 }
 
+/* =========================================================
+   SUBJECT BOOK COLORS
+   ========================================================= */
+.book-wrapper:nth-child(6n+1) .book {
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+}
+.book-wrapper:nth-child(6n+2) .book {
+    background: linear-gradient(135deg, #0891b2, #2563eb);
+}
+.book-wrapper:nth-child(6n+3) .book {
+    background: linear-gradient(135deg, #059669, #0d9488);
+}
+.book-wrapper:nth-child(6n+4) .book {
+    background: linear-gradient(135deg, #ea580c, #e11d48);
+}
+.book-wrapper:nth-child(6n+5) .book {
+    background: linear-gradient(135deg, #db2777, #9333ea);
+}
+.book-wrapper:nth-child(6n) .book {
+    background: linear-gradient(135deg, #ca8a04, #d97706);
+}
+
 .book:hover {
     transform: translateY(-8px);
     box-shadow:
@@ -660,15 +682,6 @@ body {
     font-size: 13px;
 }
 
-.close-book-btn {
-    border: none;
-    background: #5d6df5;
-    color: white;
-    padding: 12px 17px;
-    border-radius: 10px;
-    cursor: pointer;
-    font-weight: bold;
-}
 
 .open-book {
     display: grid;
@@ -1142,3 +1155,240 @@ body {
         font-size: 16px;
     }
 }
+
+/* =========================================================
+   STUDY CALENDAR / NOTE OF THIS DAY
+   ========================================================= */
+
+.study-planner {
+    margin-top: 28px;
+    padding: 20px;
+    background: rgba(255,255,255,0.88);
+    border: 1px solid #e5e7ed;
+    border-radius: 16px;
+    box-shadow: 0 8px 25px rgba(20,25,40,0.06);
+}
+
+.planner-form {
+    display: grid;
+    grid-template-columns: 180px 1fr auto;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.planner-form input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #dfe3ee;
+    border-radius: 10px;
+    padding: 12px;
+    background: white;
+    font: inherit;
+}
+
+.planner-save-btn {
+    border: none;
+    border-radius: 10px;
+    padding: 12px 15px;
+    background: #5d6df5;
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.study-day-list {
+    margin-top: 12px;
+    display: grid;
+    gap: 8px;
+}
+
+.study-day-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 12px;
+    border-radius: 11px;
+    background: #f7f8fc;
+}
+
+.study-day-info {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.study-day-info strong {
+    font-size: 13px;
+}
+
+.study-day-info span {
+    color: #666;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.study-day-delete {
+    border: none;
+    background: transparent;
+    color: #c44;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.studybook-footer {
+    text-align: center;
+    padding: 20px 10px 8px;
+    color: #888;
+    font-size: 12px;
+}
+
+.sidebar-logo {
+    position: relative;
+}
+
+.sidebar-back-btn {
+    display: none;
+    margin-left: auto;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 9px;
+    background: #f0f2ff;
+    font-size: 21px;
+    cursor: pointer;
+}
+
+@media (max-width: 760px) {
+    .sidebar-back-btn {
+        display: block;
+    }
+
+    .planner-form {
+        grid-template-columns: 1fr;
+    }
+
+    .planner-save-btn {
+        width: 100%;
+    }
+
+    .study-planner {
+        padding: 15px;
+    }
+}
+
+/* =========================================================
+   STUDY CALENDAR / NOTE OF THIS DAY
+   ========================================================= */
+
+.study-planner {
+    margin-top: 28px;
+    padding: 20px;
+    background: rgba(255,255,255,0.88);
+    border: 1px solid #e5e7ed;
+    border-radius: 16px;
+    box-shadow: 0 8px 25px rgba(20,25,40,0.06);
+}
+
+.planner-form {
+    display: grid;
+    grid-template-columns: 180px 1fr auto;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.planner-form input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #dfe3ee;
+    border-radius: 10px;
+    padding: 12px;
+    background: white;
+    font: inherit;
+}
+
+.planner-save-btn {
+    border: none;
+    border-radius: 10px;
+    padding: 12px 15px;
+    background: #5d6df5;
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.study-day-list {
+    margin-top: 12px;
+    display: grid;
+    gap: 8px;
+}
+
+.study-day-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 12px;
+    border-radius: 11px;
+    background: #f7f8fc;
+}
+
+.study-day-info {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.study-day-info strong { font-size: 13px; }
+.study-day-info span { color: #666; font-size: 12px; overflow-wrap: anywhere; }
+
+.study-day-delete {
+    border: none;
+    background: transparent;
+    color: #c44;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.studybook-footer {
+    text-align: center;
+    padding: 20px 10px 8px;
+    color: #888;
+    font-size: 12px;
+}
+
+.sidebar-logo { position: relative; }
+
+.sidebar-back-btn {
+    display: none;
+    margin-left: auto;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 9px;
+    background: #f0f2ff;
+    font-size: 21px;
+    cursor: pointer;
+}
+
+@media (max-width: 760px) {
+    .sidebar-back-btn { display: block; }
+    .planner-form { grid-template-columns: 1fr; }
+    .planner-save-btn { width: 100%; }
+    .study-planner { padding: 15px; }
+}
+
+.study-planner { margin-top:28px; padding:20px; background:rgba(255,255,255,.88); border:1px solid #e5e7ed; border-radius:16px; box-shadow:0 8px 25px rgba(20,25,40,.06); }
+.planner-form { display:grid; grid-template-columns:180px 1fr auto; gap:10px; margin-top:15px; }
+.planner-form input { width:100%; box-sizing:border-box; border:1px solid #dfe3ee; border-radius:10px; padding:12px; background:white; font:inherit; }
+.planner-save-btn { border:none; border-radius:10px; padding:12px 15px; background:#5d6df5; color:white; font-weight:700; cursor:pointer; }
+.study-day-list { margin-top:12px; display:grid; gap:8px; }
+.study-day-item { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 12px; border-radius:11px; background:#f7f8fc; }
+.study-day-info { display:grid; gap:3px; min-width:0; }
+.study-day-info strong { font-size:13px; }
+.study-day-info span { color:#666; font-size:12px; overflow-wrap:anywhere; }
+.study-day-delete { border:none; background:transparent; color:#c44; font-size:20px; cursor:pointer; }
+.studybook-footer { text-align:center; padding:20px 10px 8px; color:#888; font-size:12px; }
+.sidebar-logo { position:relative; }
+.sidebar-back-btn { display:none; margin-left:auto; width:36px; height:36px; border:none; border-radius:9px; background:#f0f2ff; font-size:21px; cursor:pointer; }
+@media (max-width:760px) { .sidebar-back-btn{display:block;} .planner-form{grid-template-columns:1fr;} .planner-save-btn{width:100%;} .study-planner{padding:15px;} }
