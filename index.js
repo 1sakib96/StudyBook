@@ -1194,20 +1194,88 @@ function localFileSearch() {
 function localPDFSelected() {
     const input = getElement("localPDF");
     const actions = getElement("localPDFActions");
+
     if (!input || !actions || !input.files || !input.files.length) return;
+
     const file = input.files[0];
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) { alert("Please select a PDF file."); input.value = ""; return; }
-    // Keep the selected File object available so mobile browsers can
-    // offer their native share/open-with sheet when supported.
+
+    if (
+        file.type !== "application/pdf" &&
+        !file.name.toLowerCase().endsWith(".pdf")
+    ) {
+        alert("Please select a PDF file.");
+        input.value = "";
+        return;
+    }
+
     window.studyBookSelectedLocalPDF = file;
 
     actions.innerHTML = `
-        <p style="font-size:13px;line-height:1.5;margin-bottom:12px;"><strong>Selected:</strong><br>${escapeHTML(file.name)}</p>
-        <button class="modal-action" onclick="saveSelectedPDF()">💾 Save PDF</button><br><br>
-        <button class="modal-action" onclick="openSelectedPDF()">📖 Open PDF</button><br><br>
-        <button class="modal-action" onclick="openPDFWithOtherApp()">📤 Open with Drive / Other App</button><br><br>
-        <button class="back-btn" style="width:100%;" onclick="backFromPDFSearch()">← Back</button>
+        <p style="font-size:13px;line-height:1.5;margin-bottom:12px;">
+            <strong>Selected:</strong><br>${escapeHTML(file.name)}
+        </p>
+
+        <button class="modal-action" onclick="saveSelectedPDF()">
+            💾 Save PDF
+        </button>
+        <br><br>
+
+        <button class="modal-action" onclick="openSelectedPDF()">
+            📖 Read PDF
+        </button>
+        <br><br>
+
+        <button class="modal-action" onclick="openPDFWithOtherApp()">
+            📤 Open with PDF App / Drive
+        </button>
+        <br><br>
+
+        <button class="back-btn" style="width:100%;" onclick="backFromPDFSearch()">
+            ← Back
+        </button>
     `;
+}
+
+
+/* =========================================================
+   OPEN PDF WITH MOBILE APP / SHARE SHEET
+   ========================================================= */
+
+async function sharePDFFile(file) {
+
+    if (!file) {
+        alert("Please select a PDF first.");
+        return false;
+    }
+
+    /*
+       A website cannot choose a specific installed app itself.
+       navigator.share({files:[file]}) asks the operating system
+       for its native share/open-with sheet. The phone decides
+       which compatible apps appear (Drive, Files, Acrobat, Xodo,
+       WPS, Samsung PDF viewer, etc.).
+    */
+    if (
+        navigator.share &&
+        navigator.canShare &&
+        navigator.canShare({ files: [file] })
+    ) {
+        try {
+            await navigator.share({
+                title: file.name,
+                text: "Open this PDF with an installed app",
+                files: [file]
+            });
+
+            return true;
+        } catch (error) {
+            if (error && error.name === "AbortError") {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 
@@ -1220,67 +1288,71 @@ async function openPDFWithOtherApp() {
         return;
     }
 
-    /*
-       On supported mobile browsers, Web Share with files opens the
-       phone's native share/open-with sheet. This is the closest a
-       website can get to showing EVERY installed PDF reader. The OS
-       decides which apps appear, so Drive, Files, Acrobat, Xodo,
-       WPS, Samsung PDF viewer and other installed readers can appear
-       when they support receiving PDF files.
-    */
-    try {
-        if (navigator.share && navigator.canShare &&
-            navigator.canShare({ files: [file] })) {
+    const shared = await sharePDFFile(file);
 
-            await navigator.share({
-                title: file.name,
-                files: [file]
-            });
+    if (shared) return;
 
-            return;
-        }
-    } catch (error) {
-        if (error && error.name === "AbortError") {
-            return;
-        }
-        console.warn("Native PDF app chooser unavailable:", error);
-    }
+    /* Fallback: download/open the file using the browser. */
+    const url = URL.createObjectURL(file);
+    window.studyBookCurrentPDFURL = url;
 
-    /*
-       Fallback for browsers without file sharing support. Opening the
-       PDF in a separate browser tab lets the mobile OS/browser provide
-       its own PDF handling options where available.
-    */
-    const fileURL = URL.createObjectURL(file);
-    window.studyBookCurrentPDFURL = fileURL;
+    showPDFActionsForFile(file, url, true);
+}
 
-    const opened = window.open(fileURL, "_blank");
 
-    if (!opened) {
-        showModal(`
-            <h2>📄 ${escapeHTML(file.name)}</h2>
+/* =========================================================
+   PDF ACTIONS FOR A FILE
+   ========================================================= */
+
+function showPDFActionsForFile(file, fileURL, isLocalSelection) {
+
+    const mobile = isMobileDevice();
+
+    showModal(`
+        <div style="text-align:center;">
+            <h2 style="word-break:break-word;">
+                📄 ${escapeHTML(file.name)}
+            </h2>
+
             <p style="color:#777;font-size:13px;line-height:1.6;">
-                Your browser does not provide an app chooser here.
-                Use the button below to open the PDF.
+                Choose how you want to read this PDF.
             </p>
-            <a href="${escapeAttribute(fileURL)}" target="_blank" rel="noopener"
-               class="modal-action" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;">
-                📖 Open PDF
+
+            <a
+                href="${escapeAttribute(fileURL)}"
+                target="_blank"
+                rel="noopener"
+                class="modal-action"
+                style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;">
+                📖 Open in Browser
             </a>
-            <br>
-            <button class="back-btn" style="width:100%;" onclick="backFromPDFSearch()">
-                ← Back
+
+            ${mobile ? `
+                <br>
+                <button
+                    class="modal-action"
+                    onclick="openPDFWithOtherApp()">
+                    📤 Open with PDF App / Drive
+                </button>
+            ` : ""}
+
+            <br><br>
+            <button
+                class="back-btn"
+                style="width:100%;"
+                onclick="backFromPDFSearch()">
+                ← Back to StudyBook
             </button>
-        `);
-    }
+        </div>
+    `);
 }
 
 
 function backFromPDFSearch() {
 
     window.studyBookSelectedLocalPDF = null;
-    closeModal();
 
+    closeModal();
 }
 
 
@@ -1416,38 +1488,17 @@ async function saveSelectedPDF() {
 
 function openSelectedPDF() {
 
-    const input =
-        getElement("localPDF");
+    const file = window.studyBookSelectedLocalPDF;
 
-
-    if (
-        !input ||
-        !input.files ||
-        input.files.length === 0
-    ) {
-
-        alert(
-            "Please choose a PDF first."
-        );
-
+    if (!file) {
+        alert("Please choose a PDF first.");
         return;
-
     }
 
+    const fileURL = URL.createObjectURL(file);
+    window.studyBookCurrentPDFURL = fileURL;
 
-    const file =
-        input.files[0];
-
-
-    const fileURL =
-        URL.createObjectURL(file);
-
-
-    showPDFViewer(
-        fileURL,
-        file.name
-    );
-
+    showPDFViewer(fileURL, file.name, file);
 }
 
 
@@ -1458,51 +1509,25 @@ function openSelectedPDF() {
 async function openSavedPDF(pdfId) {
 
     try {
+        const savedPDF = await getStoredPDF(pdfId);
 
-        const savedPDF =
-            await getStoredPDF(
-                pdfId
-            );
-
-
-        if (!savedPDF) {
-
-            alert(
-                "This saved PDF could not be found."
-            );
-
+        if (!savedPDF || !savedPDF.file) {
+            alert("This saved PDF could not be found.");
             return;
-
         }
 
+        const file = savedPDF.file;
+        const fileURL = URL.createObjectURL(file);
 
-        const file =
-            savedPDF.file;
+        window.studyBookCurrentPDFFile = file;
+        window.studyBookCurrentPDFURL = fileURL;
 
-
-        const fileURL =
-            URL.createObjectURL(file);
-
-
-        showPDFViewer(
-            fileURL,
-            savedPDF.name
-        );
-
+        showPDFViewer(fileURL, savedPDF.name, file);
 
     } catch (error) {
-
-        console.error(
-            error
-        );
-
-
-        alert(
-            "Could not open the saved PDF."
-        );
-
+        console.error("Could not open the saved PDF:", error);
+        alert("Could not open the saved PDF.");
     }
-
 }
 
 
@@ -1510,46 +1535,86 @@ async function openSavedPDF(pdfId) {
    PDF VIEWER
    ========================================================= */
 
-function showPDFViewer(fileURL, fileName) {
+function isMobileDevice() {
+    return (
+        /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent) ||
+        (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent))
+    );
+}
 
-    const isMobile = /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent);
+
+async function openCurrentPDFWithApp() {
+
+    const file = window.studyBookCurrentPDFFile;
+
+    if (!file) {
+        alert("PDF file is not available.");
+        return;
+    }
+
+    const shared = await sharePDFFile(file);
+
+    if (!shared) {
+        alert("Your browser does not provide the app chooser for this PDF. Use 'Open in Browser' instead.");
+    }
+}
+
+
+function showPDFViewer(fileURL, fileName, file) {
 
     window.studyBookCurrentPDFURL = fileURL;
+    window.studyBookCurrentPDFFile = file || null;
 
-    if (isMobile) {
-        // Mobile browsers handle a direct PDF tab much better than an iframe.
-        // Keep the current StudyBook modal open underneath so pressing Back
-        // from the PDF/browser returns the user to the same place.
-        const pdfWindow = window.open(fileURL, "_blank");
+    /*
+       IMPORTANT:
+       Mobile browsers are unreliable with PDF blob URLs inside iframes.
+       Therefore the mobile version uses a normal browser tab plus the
+       native app/share sheet. Desktop can still use the in-app viewer.
+    */
+    if (isMobileDevice()) {
 
-        if (pdfWindow) {
-            return;
-        }
-
-        // Fallback when the browser blocks the new tab.
         showModal(`
-            <h2>📄 ${escapeHTML(fileName)}</h2>
-            <p style="color:#777;font-size:13px;line-height:1.6;">
-                Tap below to open the PDF in your mobile browser.
-            </p>
-            <a
-                href="${escapeAttribute(fileURL)}"
-                target="_blank"
-                rel="noopener"
-                class="modal-action"
-                style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;">
-                📖 Open PDF
-            </a>
-            <br>
-            <button class="back-btn" style="width:100%;" onclick="closePDFViewer()">
-                ← Back
-            </button>
+            <div style="text-align:center;">
+                <h2 style="word-break:break-word;">
+                    📄 ${escapeHTML(fileName)}
+                </h2>
+
+                <p style="color:#777;font-size:13px;line-height:1.6;">
+                    Choose a PDF reader.
+                </p>
+
+                <a
+                    href="${escapeAttribute(fileURL)}"
+                    target="_blank"
+                    rel="noopener"
+                    class="modal-action"
+                    style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;">
+                    📖 Open in Browser / PDF Viewer
+                </a>
+
+                <br>
+
+                <button
+                    class="modal-action"
+                    onclick="openCurrentPDFWithApp()">
+                    📤 Open with PDF App / Drive
+                </button>
+
+                <br><br>
+
+                <button
+                    class="back-btn"
+                    style="width:100%;"
+                    onclick="closePDFViewer()">
+                    ← Back to StudyBook
+                </button>
+            </div>
         `);
 
         return;
     }
 
-    // Desktop keeps the existing in-app PDF viewer.
+    /* Desktop: reliable in-page viewer + browser fallback. */
     showModal(`
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:15px;">
             <h2 style="margin:0;font-size:18px;word-break:break-word;">📄 ${escapeHTML(fileName)}</h2>
@@ -1559,17 +1624,23 @@ function showPDFViewer(fileURL, fileName) {
         <iframe
             src="${escapeAttribute(fileURL)}"
             title="${escapeAttribute(fileName)}"
-            style="width:100%;height:70vh;min-height:400px;border:1px solid #ddd;border-radius:12px;background:white;"
+            style="display:block;width:100%;height:70vh;min-height:400px;border:1px solid #ddd;border-radius:12px;background:white;"
         ></iframe>
 
-        <div style="margin-top:10px;text-align:center;">
+        <div style="margin-top:10px;text-align:center;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
             <a
                 href="${escapeAttribute(fileURL)}"
                 target="_blank"
                 rel="noopener"
                 style="display:inline-block;padding:10px 14px;border-radius:10px;background:#f1f3f8;color:#333;text-decoration:none;font-weight:600;">
-                📖 Open PDF in Browser
+                📖 Open in Browser
             </a>
+
+            ${file ? `
+                <button class="modal-action" style="width:auto;" onclick="openCurrentPDFWithApp()">
+                    📤 Open with App
+                </button>
+            ` : ""}
         </div>
     `);
 }
@@ -1578,24 +1649,14 @@ function showPDFViewer(fileURL, fileName) {
 function closePDFViewer() {
 
     window.studyBookSelectedLocalPDF = null;
+    window.studyBookCurrentPDFFile = null;
 
-    if (
-        window.studyBookCurrentPDFURL
-    ) {
-
-        URL.revokeObjectURL(
-            window.studyBookCurrentPDFURL
-        );
-
-
-        window.studyBookCurrentPDFURL =
-            null;
-
+    if (window.studyBookCurrentPDFURL) {
+        URL.revokeObjectURL(window.studyBookCurrentPDFURL);
+        window.studyBookCurrentPDFURL = null;
     }
 
-
     closeModal();
-
 }
 
 
