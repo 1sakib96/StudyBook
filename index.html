@@ -80,6 +80,12 @@
             <div class="sidebar-logo">
                 <span>📚</span>
                 <strong>StudyBook</strong>
+                <button
+                    class="sidebar-back-btn"
+                    onclick="closeSidebarOnMobile()"
+                    aria-label="Close menu">
+                    ←
+                </button>
             </div>
 
             <div class="sidebar-user">
@@ -253,6 +259,41 @@
                 </section>
 
 
+                <!-- STUDY PLANNER -->
+
+                <section class="study-planner">
+
+                    <div class="section-title">
+                        <div>
+                            <h2>📅 Study Calendar & Notes</h2>
+                            <p>Save an important date and write a note for that day.</p>
+                        </div>
+                    </div>
+
+                    <div class="planner-form">
+                        <input
+                            type="date"
+                            id="plannerDate"
+                            aria-label="Important date">
+
+                        <input
+                            type="text"
+                            id="plannerNote"
+                            placeholder="Note of this day..."
+                            maxlength="200">
+
+                        <button
+                            class="planner-save-btn"
+                            onclick="saveStudyDay()">
+                            💾 Save Day
+                        </button>
+                    </div>
+
+                    <div id="studyDayList" class="study-day-list"></div>
+
+                </section>
+
+
                 <!-- EXTERNAL SEARCH -->
 
                 <section class="external-search">
@@ -329,11 +370,6 @@
 
                     </div>
 
-                    <button
-                        class="close-book-btn"
-                        onclick="showDashboard()">
-                        📕 Close Book
-                    </button>
 
                 </div>
 
@@ -647,6 +683,10 @@
                 </div>
 
             </div>
+
+            <footer class="studybook-footer">
+                Made by Nazmus Sakib Hira.
+            </footer>
 
         </main>
 
