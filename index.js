@@ -1412,23 +1412,30 @@ async function openPDFViewerReliably(url, file) {
         return;
     }
 
-    // Mobile: do NOT render a long scrolling list of canvases. That approach
-    // can freeze phones and can leave the reader looking stuck. Instead, keep
-    // exactly ONE canvas on screen and move through the PDF one page at a time.
+    // Mobile/Messenger-safe reader:
+    // Keep exactly one rendered page to avoid freezing phones.
+    // Put Back first and keep reading/navigation controls in separate rows.
     showModal(`
         <div class="pdf-fullscreen-panel mobile-reader-panel">
-            <div class="pdf-toolbar">
+            <div class="pdf-toolbar mobile-pdf-topbar">
+                <button class="back-btn" onclick="closePDFViewer()">← Back</button>
                 <strong class="pdf-title">📄 ${escapeHTML(file.name || "StudyBook PDF")}</strong>
-                <div class="pdf-toolbar-actions">
-                    <button class="modal-action" onclick="previousPDFPage()">‹ Prev</button>
-                    <span id="pdfPageIndicator" class="pdf-page-indicator">Loading…</span>
-                    <button class="modal-action" onclick="nextPDFPage()">Next ›</button>
-                    <button class="modal-action" onclick="downloadCurrentPDF()">💾</button>
-                    <button class="back-btn" onclick="closePDFViewer()">← Back</button>
-                </div>
             </div>
+
+            <div class="mobile-pdf-tools">
+                <button class="modal-action" onclick="openCurrentPDFInBrowser()">🌐 Open in Browser</button>
+                <button class="modal-action" onclick="openCurrentPDFWithApp()">📤 Open with App / Drive</button>
+                <button class="modal-action" onclick="downloadCurrentPDF()">💾 Download PDF</button>
+            </div>
+
             <div id="mobilePdfReader" class="mobile-pdf-reader pdf-single-page-reader">
                 <div class="pdf-loading">Opening PDF…</div>
+            </div>
+
+            <div class="mobile-pdf-navigation">
+                <button class="modal-action" onclick="previousPDFPage()">‹ Previous</button>
+                <span id="pdfPageIndicator" class="pdf-page-indicator">Loading…</span>
+                <button class="modal-action" onclick="nextPDFPage()">Next ›</button>
             </div>
         </div>
     `);
@@ -1556,28 +1563,41 @@ async function nextPDFPage() {
 }
 
 function openCurrentPDFInBrowser() {
-    const url = window.studyBookCurrentPDFURL;
     const file = window.studyBookCurrentPDFFile;
-
     if (!file) {
         alert("PDF is not available.");
         return;
     }
 
     try {
-        const openURL = url || URL.createObjectURL(file);
-        const a = document.createElement("a");
-        a.href = openURL;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        a.style.position = "fixed";
-        a.style.left = "-9999px";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        const openURL = window.studyBookCurrentPDFURL || URL.createObjectURL(file);
+        window.studyBookCurrentPDFURL = openURL;
 
-        // Do not revoke immediately: the new browser tab may still need it.
-        if (!url) window.studyBookCurrentPDFURL = openURL;
+        // A real user-initiated anchor click is more reliable than
+        // window.open inside Messenger/in-app browsers.
+        const link = document.createElement("a");
+        link.href = openURL;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        // If an in-app browser blocks the new tab, show a clear fallback
+        // instead of silently doing nothing.
+        setTimeout(function () {
+            if (/FBAN|FBAV|Messenger|Instagram/i.test(navigator.userAgent)) {
+                const note = document.createElement("div");
+                note.className = "pdf-app-note";
+                note.innerHTML = "If the PDF did not open, use your browser menu and choose <strong>Open in browser</strong>, then read the PDF there.";
+                const reader = getElement("mobilePdfReader");
+                if (reader && !reader.querySelector(".external-browser-note")) {
+                    note.classList.add("external-browser-note");
+                    reader.prepend(note);
+                }
+            }
+        }, 500);
     } catch (e) {
         console.error("Could not open PDF in browser:", e);
         downloadFileObject(file);
