@@ -2,10 +2,6 @@ let currentSubjectId = null;
 let subjects = [];
 let student = null;
 
-const PDF_DB_NAME = "StudyBookPDFPermanentV5";
-const PDF_DB_VERSION = 1;
-const PDF_STORE_NAME = "pdfFiles";
-
 document.addEventListener("DOMContentLoaded", function () {
 
     loadData();
@@ -741,127 +737,323 @@ function getCurrentSubject() {
    INDEXEDDB
    ========================================================= */
 
+
+/* =========================================================
+   PERMANENT LOCAL PDF STORAGE
+   Uses IndexedDB with chunked ArrayBuffers.
+   This avoids Blob/File/base64 compatibility problems.
+   ========================================================= */
+
+const PDF_DB_NAME = "StudyBookPermanentPDF";
+const PDF_DB_VERSION = 10;
+const PDF_META_STORE = "pdfMeta";
+const PDF_CHUNK_STORE = "pdfChunks";
+const PDF_CHUNK_SIZE = 1024 * 1024; // 1 MB
+
 function openPDFDatabase() {
-    return new Promise(function (resolve, reject) {
+    return new Promise(function(resolve, reject) {
         if (!window.indexedDB) {
             reject(new Error("This browser does not support permanent PDF storage."));
             return;
         }
+
         let request;
-        try { request = indexedDB.open("StudyBookPDFStoreV6", 1); }
-        catch (e) { reject(e); return; }
-        request.onupgradeneeded = function (event) {
+        try {
+            request = indexedDB.open(PDF_DB_NAME, PDF_DB_VERSION);
+        } catch (e) {
+            reject(e);
+            return;
+        }
+
+        request.onupgradeneeded = function(event) {
             const db = event.target.result;
-            if (!db.objectStoreNames.contains("pdfFiles")) {
-                db.createObjectStore("pdfFiles", { keyPath: "id" });
+
+            // This database has a unique name/version so it cannot collide with
+            // any of the older StudyBook PDF databases.
+            if (!db.objectStoreNames.contains(PDF_META_STORE)) {
+                db.createObjectStore(PDF_META_STORE, { keyPath: "id" });
+            }
+
+            if (!db.objectStoreNames.contains(PDF_CHUNK_STORE)) {
+                db.createObjectStore(PDF_CHUNK_STORE, {
+                    keyPath: ["id", "index"]
+                });
             }
         };
-        request.onsuccess = function () {
+
+        request.onsuccess = function() {
             const db = request.result;
-            db.onversionchange = function () { try { db.close(); } catch (e) {} };
+            db.onversionchange = function() {
+                try { db.close(); } catch (e) {}
+            };
             resolve(db);
         };
-        request.onerror = function () { reject(request.error || new Error("Could not open PDF storage.")); };
-        request.onblocked = function () { reject(new Error("PDF storage is busy. Close another StudyBook tab and try again.")); };
+
+        request.onerror = function() {
+            reject(request.error || new Error("Could not open PDF storage."));
+        };
+
+        request.onblocked = function() {
+            reject(new Error("PDF storage is busy. Close another StudyBook tab and try again."));
+        };
     });
-}
-
-function bytesToBase64(bytes) {
-    let binary = "";
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-        binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunk, bytes.length)));
-    }
-    return btoa(binary);
-}
-
-function base64ToBytes(base64) {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes;
-}
-
-function arrayBufferFrom(value) {
-    if (!value) return null;
-    if (value instanceof ArrayBuffer) return value;
-    if (ArrayBuffer.isView(value)) return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
-    return null;
 }
 
 async function fileToPDFBytes(file) {
     if (!file) throw new Error("No PDF selected.");
-    if (typeof file.arrayBuffer === "function") {
-        const ab = await file.arrayBuffer();
-        const bytes = new Uint8Array(ab);
-        if (bytes.length) return bytes;
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+
+    if (!bytes.byteLength) {
+        throw new Error("The selected PDF is empty.");
     }
-    throw new Error("The selected PDF could not be read from the device.");
+
+    // Every real PDF starts with %PDF.
+    const header = new TextDecoder().decode(bytes.subarray(0, 5));
+    if (header !== "%PDF-") {
+        throw new Error("The selected file is not a valid PDF.");
+    }
+
+    return bytes;
 }
 
 async function storePDFFile(id, file) {
     const bytes = await fileToPDFBytes(file);
-    if (!bytes.length) throw new Error("The selected PDF is empty.");
-
     const db = await openPDFDatabase();
+
     try {
-        const record = {
-            id: String(id),
-            name: file.name || "StudyBook.pdf",
-            type: "application/pdf",
-            size: bytes.byteLength,
-            base64: bytesToBase64(bytes),
-            savedAt: Date.now()
-        };
-
+        // Remove any previous copy with the same ID.
         await new Promise(function(resolve, reject) {
-            const tx = db.transaction("pdfFiles", "readwrite");
-            tx.objectStore("pdfFiles").put(record);
+            const tx = db.transaction(
+                [PDF_META_STORE, PDF_CHUNK_STORE],
+                "readwrite"
+            );
+
+            tx.objectStore(PDF_META_STORE).delete(String(id));
+
+            const chunks = tx.objectStore(PDF_CHUNK_STORE);
+            const range = IDBKeyRange.bound(
+                [String(id), 0],
+                [String(id), Number.MAX_SAFE_INTEGER]
+            );
+            const cursorRequest = chunks.openCursor(range);
+
+            cursorRequest.onsuccess = function(event) {
+                const cursor = event.target.result;
+                if (cursor) {
+                    cursor.delete();
+                    cursor.continue();
+                }
+            };
+
             tx.oncomplete = resolve;
-            tx.onerror = function() { reject(tx.error || new Error("Could not save PDF.")); };
-            tx.onabort = function() { reject(tx.error || new Error("Could not save PDF.")); };
+            tx.onerror = function() {
+                reject(tx.error || new Error("Could not prepare PDF storage."));
+            };
+            tx.onabort = function() {
+                reject(tx.error || new Error("Could not prepare PDF storage."));
+            };
         });
 
-        // Read back immediately. This makes Save mean "verified and persistent".
-        const check = await new Promise(function(resolve, reject) {
-            const tx = db.transaction("pdfFiles", "readonly");
-            const req = tx.objectStore("pdfFiles").get(String(id));
-            req.onsuccess = function() { resolve(req.result || null); };
-            req.onerror = function() { reject(req.error || new Error("Could not verify saved PDF.")); };
+        // Store metadata and binary chunks in one transaction.
+        await new Promise(function(resolve, reject) {
+            const tx = db.transaction(
+                [PDF_META_STORE, PDF_CHUNK_STORE],
+                "readwrite"
+            );
+
+            tx.objectStore(PDF_META_STORE).put({
+                id: String(id),
+                name: file.name || "StudyBook.pdf",
+                size: bytes.byteLength,
+                chunks: Math.ceil(bytes.byteLength / PDF_CHUNK_SIZE),
+                savedAt: Date.now()
+            });
+
+            const store = tx.objectStore(PDF_CHUNK_STORE);
+
+            let index = 0;
+            for (let offset = 0; offset < bytes.byteLength; offset += PDF_CHUNK_SIZE) {
+                const part = bytes.slice(
+                    offset,
+                    Math.min(offset + PDF_CHUNK_SIZE, bytes.byteLength)
+                );
+
+                store.put({
+                    id: String(id),
+                    index: index++,
+                    data: part.buffer
+                });
+            }
+
+            tx.oncomplete = resolve;
+            tx.onerror = function() {
+                reject(tx.error || new Error("Could not save PDF."));
+            };
+            tx.onabort = function() {
+                reject(tx.error || new Error("Could not save PDF."));
+            };
         });
-        if (!check || typeof check.base64 !== "string") throw new Error("PDF was not stored correctly.");
-        const checkBytes = base64ToBytes(check.base64);
-        if (checkBytes.byteLength !== bytes.byteLength) throw new Error("PDF verification failed.");
+
+        // Verify the stored metadata and every chunk.
+        const check = await getStoredPDFBytes(String(id));
+
+        if (!check || check.byteLength !== bytes.byteLength) {
+            throw new Error("PDF storage verification failed.");
+        }
+
+        const checkHeader =
+            new TextDecoder().decode(check.subarray(0, 5));
+
+        if (checkHeader !== "%PDF-") {
+            throw new Error("Saved PDF verification failed.");
+        }
+
+    } finally {
+        try { db.close(); } catch (e) {}
+    }
+}
+
+async function getStoredPDFBytes(id) {
+    const db = await openPDFDatabase();
+
+    try {
+        const meta = await new Promise(function(resolve, reject) {
+            const tx = db.transaction(PDF_META_STORE, "readonly");
+            const req = tx.objectStore(PDF_META_STORE).get(String(id));
+
+            req.onsuccess = function() {
+                resolve(req.result || null);
+            };
+
+            req.onerror = function() {
+                reject(req.error || new Error("Could not read PDF metadata."));
+            };
+        });
+
+        if (!meta) return null;
+
+        const records = await new Promise(function(resolve, reject) {
+            const tx = db.transaction(PDF_CHUNK_STORE, "readonly");
+            const store = tx.objectStore(PDF_CHUNK_STORE);
+            const range = IDBKeyRange.bound(
+                [String(id), 0],
+                [String(id), Number.MAX_SAFE_INTEGER]
+            );
+
+            const result = [];
+            const request = store.openCursor(range);
+
+            request.onsuccess = function(event) {
+                const cursor = event.target.result;
+
+                if (!cursor) {
+                    resolve(result);
+                    return;
+                }
+
+                result.push(cursor.value);
+                cursor.continue();
+            };
+
+            request.onerror = function() {
+                reject(request.error || new Error("Could not read PDF data."));
+            };
+        });
+
+        records.sort(function(a, b) {
+            return a.index - b.index;
+        });
+
+        if (records.length !== meta.chunks) {
+            throw new Error("Saved PDF data is incomplete.");
+        }
+
+        const bytes = new Uint8Array(meta.size);
+        let offset = 0;
+
+        for (const record of records) {
+            let part;
+
+            if (record.data instanceof ArrayBuffer) {
+                part = new Uint8Array(record.data);
+            } else if (ArrayBuffer.isView(record.data)) {
+                part = new Uint8Array(
+                    record.data.buffer,
+                    record.data.byteOffset,
+                    record.data.byteLength
+                );
+            } else {
+                throw new Error("Saved PDF chunk is invalid.");
+            }
+
+            if (offset + part.byteLength > bytes.byteLength) {
+                throw new Error("Saved PDF data is corrupted.");
+            }
+
+            bytes.set(part, offset);
+            offset += part.byteLength;
+        }
+
+        if (offset !== meta.size) {
+            throw new Error("Saved PDF size verification failed.");
+        }
+
+        return bytes;
+
     } finally {
         try { db.close(); } catch (e) {}
     }
 }
 
 async function getStoredPDF(id) {
+    const bytes = await getStoredPDFBytes(String(id));
+
+    if (!bytes || !bytes.byteLength) {
+        return null;
+    }
+
+    const blob = new Blob([bytes], { type: "application/pdf" });
+
     const db = await openPDFDatabase();
+    let name = "StudyBook.pdf";
+    let savedAt = Date.now();
+
     try {
-        const record = await new Promise(function(resolve, reject) {
-            const tx = db.transaction("pdfFiles", "readonly");
-            const req = tx.objectStore("pdfFiles").get(String(id));
-            req.onsuccess = function() { resolve(req.result || null); };
-            req.onerror = function() { reject(req.error || new Error("Could not read saved PDF.")); };
-        });
-        if (!record) return null;
+        const meta = await new Promise(function(resolve, reject) {
+            const tx = db.transaction(PDF_META_STORE, "readonly");
+            const req = tx.objectStore(PDF_META_STORE).get(String(id));
 
-        let bytes = null;
-        if (record.base64) bytes = base64ToBytes(record.base64);
-        if (!bytes && record.data) bytes = new Uint8Array(arrayBufferFrom(record.data) || new ArrayBuffer(0));
-        if (!bytes || !bytes.byteLength) throw new Error("Saved PDF data is missing or empty.");
+            req.onsuccess = function() {
+                resolve(req.result || null);
+            };
 
-        const blob = new Blob([bytes], { type: "application/pdf" });
-        const file = new File([blob], record.name || "StudyBook.pdf", {
-            type: "application/pdf",
-            lastModified: record.savedAt || Date.now()
+            req.onerror = function() {
+                reject(req.error);
+            };
         });
-        return { id: record.id, name: file.name, type: file.type, size: file.size, savedAt: record.savedAt, file: file };
+
+        if (meta) {
+            name = meta.name || name;
+            savedAt = meta.savedAt || savedAt;
+        }
     } finally {
         try { db.close(); } catch (e) {}
     }
+
+    const file = new File([blob], name, {
+        type: "application/pdf",
+        lastModified: savedAt
+    });
+
+    return {
+        id: String(id),
+        name: file.name,
+        type: "application/pdf",
+        size: file.size,
+        savedAt: savedAt,
+        file: file
+    };
 }
 
 /* =========================================================
@@ -869,127 +1061,72 @@ async function getStoredPDF(id) {
    ========================================================= */
 
 async function deleteStoredPDF(id) {
-
     if (!id) return;
 
+    const db = await openPDFDatabase();
 
-    const db =
-        await openPDFDatabase();
+    return new Promise(function(resolve, reject) {
+        const tx = db.transaction(
+            [PDF_META_STORE, PDF_CHUNK_STORE],
+            "readwrite"
+        );
 
+        tx.objectStore(PDF_META_STORE).delete(String(id));
 
-    return new Promise(
-        function (resolve, reject) {
+        const chunks = tx.objectStore(PDF_CHUNK_STORE);
+        const range = IDBKeyRange.bound(
+            [String(id), 0],
+            [String(id), Number.MAX_SAFE_INTEGER]
+        );
 
-            const transaction =
-                db.transaction(
-                    PDF_STORE_NAME,
-                    "readwrite"
-                );
+        const req = chunks.openCursor(range);
+        req.onsuccess = function(event) {
+            const cursor = event.target.result;
+            if (cursor) {
+                cursor.delete();
+                cursor.continue();
+            }
+        };
 
+        tx.oncomplete = function() {
+            try { db.close(); } catch (e) {}
+            resolve();
+        };
 
-            const store =
-                transaction.objectStore(
-                    PDF_STORE_NAME
-                );
-
-
-            store.delete(id);
-
-
-            transaction.oncomplete =
-                function () {
-
-                    db.close();
-
-                    resolve();
-
-                };
-
-
-            transaction.onerror =
-                function () {
-
-                    db.close();
-
-                    reject(
-                        transaction.error
-                    );
-
-                };
-
-        }
-    );
-
+        tx.onerror = function() {
+            try { db.close(); } catch (e) {}
+            reject(tx.error || new Error("Could not delete PDF."));
+        };
+    });
 }
-
-
-/* =========================================================
-   CLEAR STORED PDF FILES
-   ========================================================= */
 
 async function clearAllStoredPDFs() {
-
     try {
+        const db = await openPDFDatabase();
 
-        const db =
-            await openPDFDatabase();
+        return new Promise(function(resolve, reject) {
+            const tx = db.transaction(
+                [PDF_META_STORE, PDF_CHUNK_STORE],
+                "readwrite"
+            );
 
+            tx.objectStore(PDF_META_STORE).clear();
+            tx.objectStore(PDF_CHUNK_STORE).clear();
 
-        return new Promise(
-            function (resolve, reject) {
+            tx.oncomplete = function() {
+                try { db.close(); } catch (e) {}
+                resolve();
+            };
 
-                const transaction =
-                    db.transaction(
-                        PDF_STORE_NAME,
-                        "readwrite"
-                    );
-
-
-                const store =
-                    transaction.objectStore(
-                        PDF_STORE_NAME
-                    );
-
-
-                store.clear();
-
-
-                transaction.oncomplete =
-                    function () {
-
-                        db.close();
-
-                        resolve();
-
-                    };
-
-
-                transaction.onerror =
-                    function () {
-
-                        db.close();
-
-                        reject(
-                            transaction.error
-                        );
-
-                    };
-
-            }
-        );
-
-
+            tx.onerror = function() {
+                try { db.close(); } catch (e) {}
+                reject(tx.error);
+            };
+        });
     } catch (error) {
-
-        console.error(
-            "Could not clear PDF storage:",
-            error
-        );
-
+        console.error("Could not clear PDF storage:", error);
     }
-
 }
-
 
 /* =========================================================
    ADD PDF
@@ -1427,7 +1564,7 @@ async function openSavedPDF(pdfId) {
         openPDFViewerReliably(url, actualFile);
     } catch (error) {
         console.error("Could not open saved PDF:", error);
-        alert("Could not open the saved PDF. Please try saving the PDF again.");
+        alert("Could not open the saved PDF. " + (error && error.message ? error.message : "Please save the PDF again."));
     }
 }
 
@@ -1452,61 +1589,89 @@ async function openPDFViewerReliably(url, file) {
     window.studyBookCurrentPDFFile = file;
     window.studyBookCurrentPDFURL = url;
 
+    /*
+      IMPORTANT:
+      Do not use PDF.js for the actual reading path.
+      The browser's native PDF viewer is much more reliable for both
+      locally selected PDFs and PDFs restored from IndexedDB.
+    */
+
     const mobile = isMobileDevice();
 
-    // Desktop: use the browser's native PDF viewer. This is deliberately
-    // separate from the mobile reader because Chrome/Edge desktop handle
-    // Blob PDFs very reliably and it avoids heavy canvas rendering.
-    if (!mobile) {
-        const nativeURL = appendPDFViewOptions(url);
-        showModal(`
-            <div class="pdf-fullscreen-panel native-pdf-panel">
-                <div class="pdf-toolbar">
-                    <strong class="pdf-title">📄 ${escapeHTML(file.name || "StudyBook PDF")}</strong>
-                    <div class="pdf-toolbar-actions">
-                        <button class="modal-action" onclick="openCurrentPDFInBrowser()">↗ Open</button>
-                        <button class="modal-action" onclick="downloadCurrentPDF()">💾 Download</button>
+    if (mobile) {
+        // A real top-level navigation is intentionally used here.
+        // It works with local File/Blob URLs without depending on
+        // popups, iframes, PDF.js workers, or Messenger's viewer.
+        try {
+            window.location.assign(url);
+            return;
+        } catch (error) {
+            console.error("Native mobile PDF navigation failed:", error);
+
+            // Keep a visible fallback if the browser refuses navigation.
+            showModal(`
+                <div class="pdf-fullscreen-panel mobile-reader-panel">
+                    <div class="pdf-toolbar mobile-pdf-topbar">
                         <button class="back-btn" onclick="closePDFViewer()">← Back</button>
+                        <strong class="pdf-title">📄 ${escapeHTML(file.name || "StudyBook PDF")}</strong>
+                    </div>
+                    <div class="mobile-pdf-choice">
+                        <p class="pdf-choice-text">
+                            The browser could not open the PDF directly.
+                        </p>
+                        <button class="modal-action pdf-main-action"
+                            onclick="openCurrentPDFInBrowser()">
+                            🌐 Open in Browser
+                        </button>
+                        <button class="modal-action pdf-main-action"
+                            onclick="openCurrentPDFWithApp()">
+                            📤 Open with PDF App / Drive
+                        </button>
+                        <button class="modal-action pdf-main-action"
+                            onclick="downloadCurrentPDF()">
+                            💾 Download PDF
+                        </button>
                     </div>
                 </div>
-                <iframe
-                    class="desktop-pdf-frame"
-                    src="${escapeAttribute(nativeURL)}"
-                    title="${escapeAttribute(file.name || 'StudyBook PDF')}"
-                    allow="fullscreen"
-                ></iframe>
-            </div>
-        `);
-        const modal = getElement("modal");
-        if (modal) modal.classList.add("pdf-viewer-modal");
-        return;
+            `);
+
+            const modal = getElement("modal");
+            if (modal) modal.classList.add("pdf-viewer-modal");
+            return;
+        }
     }
 
-    // Mobile/Messenger-safe reader:
-    // Keep exactly one rendered page to avoid freezing phones.
-    // Put Back first and keep reading/navigation controls in separate rows.
+    // Desktop: keep the working full-screen native browser PDF viewer.
+    const nativeURL = appendPDFViewOptions(url);
+
     showModal(`
-        <div class="pdf-fullscreen-panel mobile-reader-panel">
-            <div class="pdf-toolbar mobile-pdf-topbar">
-                <button class="back-btn" onclick="closePDFViewer()">← Back</button>
-                <strong class="pdf-title">📄 ${escapeHTML(file.name || "StudyBook PDF")}</strong>
+        <div class="pdf-fullscreen-panel native-pdf-panel">
+            <div class="pdf-toolbar">
+                <strong class="pdf-title">
+                    📄 ${escapeHTML(file.name || "StudyBook PDF")}
+                </strong>
+                <div class="pdf-toolbar-actions">
+                    <button class="modal-action"
+                        onclick="openCurrentPDFInBrowser()">
+                        ↗ Open
+                    </button>
+                    <button class="modal-action"
+                        onclick="downloadCurrentPDF()">
+                        💾 Download
+                    </button>
+                    <button class="back-btn"
+                        onclick="closePDFViewer()">
+                        ← Back
+                    </button>
+                </div>
             </div>
 
-            <div class="mobile-pdf-tools">
-                <button class="modal-action" onclick="openCurrentPDFInBrowser()">🌐 Open in Browser</button>
-                <button class="modal-action" onclick="openCurrentPDFWithApp()">📤 Open with App / Drive</button>
-                <button class="modal-action" onclick="downloadCurrentPDF()">💾 Download PDF</button>
-            </div>
-
-            <div id="mobilePdfReader" class="mobile-pdf-reader pdf-single-page-reader">
-                <div class="pdf-loading">Opening PDF…</div>
-            </div>
-
-            <div class="mobile-pdf-navigation">
-                <button class="modal-action" onclick="previousPDFPage()">‹ Previous</button>
-                <span id="pdfPageIndicator" class="pdf-page-indicator">Loading…</span>
-                <button class="modal-action" onclick="nextPDFPage()">Next ›</button>
-            </div>
+            <iframe
+                class="desktop-pdf-frame"
+                src="${escapeAttribute(nativeURL)}"
+                title="${escapeAttribute(file.name || "StudyBook PDF")}"
+                allow="fullscreen"
+            ></iframe>
         </div>
     `);
 
@@ -1515,9 +1680,6 @@ async function openPDFViewerReliably(url, file) {
         modal.classList.add("pdf-viewer-modal");
         modal.scrollTop = 0;
     }
-
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    await renderMobileSinglePagePDF(file);
 }
 
 async function renderMobileSinglePagePDF(file) {
