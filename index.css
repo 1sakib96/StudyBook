@@ -1392,3 +1392,126 @@ body {
 .sidebar-logo { position:relative; }
 .sidebar-back-btn { display:none; margin-left:auto; width:36px; height:36px; border:none; border-radius:9px; background:#f0f2ff; font-size:21px; cursor:pointer; }
 @media (max-width:760px) { .sidebar-back-btn{display:block;} .planner-form{grid-template-columns:1fr;} .planner-save-btn{width:100%;} .study-planner{padding:15px;} }
+
+/* =========================================================
+   FULL-SCREEN PDF VIEWER
+   ========================================================= */
+.pdf-fullscreen-panel {
+    width: 100%;
+    height: 100%;
+    min-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+.pdf-toolbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0 12px;
+}
+
+.pdf-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pdf-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.pdf-fullscreen-frame {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    height: calc(100vh - 100px);
+    border: 0;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.pdf-mobile-actions {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 14px;
+    max-width: 520px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.pdf-main-action {
+    width: 100%;
+    min-height: 52px;
+    font-size: 15px;
+}
+
+@media (max-width: 760px) {
+    .pdf-fullscreen-panel {
+        min-height: 100dvh;
+    }
+
+    .pdf-toolbar {
+        padding: 6px 0 10px;
+    }
+
+    .pdf-toolbar-actions .modal-action {
+        width: auto;
+    }
+
+    .pdf-fullscreen-frame {
+        height: calc(100dvh - 70px);
+        border-radius: 6px;
+    }
+}
+
+/* =========================================================
+   TRUE FULL-SCREEN PDF MODAL
+   ========================================================= */
+.modal.pdf-viewer-modal {
+    padding: 0;
+    background: #111827;
+    align-items: stretch;
+    justify-content: stretch;
+}
+
+.modal.pdf-viewer-modal .modal-box {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    height: 100dvh;
+    min-height: 100vh;
+    border-radius: 0;
+    padding: 14px;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.pdf-app-note {
+    margin: 0;
+    padding: 0 8px;
+    color: #6b7280;
+    font-size: 12px;
+    line-height: 1.55;
+    text-align: center;
+}
+
+@media (max-width:760px) {
+    .modal.pdf-viewer-modal .modal-box {
+        padding: 10px;
+    }
+
+    .pdf-fullscreen-panel {
+        min-height: calc(100dvh - 20px);
+    }
+}
