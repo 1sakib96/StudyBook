@@ -1322,10 +1322,82 @@ function showPDFActionsForFile(file, fileURL) {
     getElement("modal").classList.add("pdf-viewer-modal");
 }
 
+function openNativePDFFile(file) {
+    if (!file) {
+        alert("PDF is not available.");
+        return false;
+    }
+
+    try {
+        const url = URL.createObjectURL(file);
+        window.studyBookCurrentPDFFile = file;
+        window.studyBookCurrentPDFURL = url;
+        rememberPDFURL(url);
+
+        // IMPORTANT: use a real anchor click. Mobile browsers (especially
+        // Messenger's in-app browser) handle this much better than an
+        // iframe or an async window.open/blob navigation. The OS/browser
+        // gets the original PDF and can display its normal PDF controls.
+        const link = document.createElement("a");
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.setAttribute("type", "application/pdf");
+        link.style.position = "fixed";
+        link.style.left = "-9999px";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        return true;
+    } catch (error) {
+        console.error("Could not open PDF:", error);
+        return false;
+    }
+}
+
+function showMobilePDFChoice(file) {
+    if (!file) return;
+    window.studyBookCurrentPDFFile = file;
+    if (window.studyBookCurrentPDFURL) {
+        try { URL.revokeObjectURL(window.studyBookCurrentPDFURL); } catch (e) {}
+    }
+    window.studyBookCurrentPDFURL = URL.createObjectURL(file);
+    rememberPDFURL(window.studyBookCurrentPDFURL);
+
+    showModal(`
+        <div class="pdf-fullscreen-panel mobile-reader-panel">
+            <div class="pdf-toolbar mobile-pdf-topbar">
+                <button class="back-btn" onclick="closePDFViewer()">← Back</button>
+                <strong class="pdf-title">📄 ${escapeHTML(file.name || "StudyBook PDF")}</strong>
+            </div>
+            <div class="mobile-pdf-choice">
+                <p class="pdf-choice-text">Your PDF is ready. Open it with the phone's normal PDF viewer for the clearest reading experience.</p>
+                <button class="modal-action pdf-main-action" onclick="openCurrentPDFInBrowser()">📖 Read PDF</button>
+                <button class="modal-action pdf-main-action" onclick="openCurrentPDFWithApp()">📤 Open with PDF App / Drive</button>
+                <button class="modal-action pdf-main-action" onclick="downloadCurrentPDF()">💾 Download PDF</button>
+                <button class="back-btn pdf-main-action" onclick="closePDFViewer()">← Back</button>
+            </div>
+            <p class="pdf-app-note">If you opened StudyBook inside Messenger, use Messenger's browser menu → <strong>Open in browser</strong> if the PDF does not open here.</p>
+        </div>
+    `);
+    const modal = getElement("modal");
+    if (modal) modal.classList.add("pdf-viewer-modal");
+}
+
 function openSelectedPDF() {
     const file = window.studyBookSelectedLocalPDF;
     if (!file) {
         alert("Please choose a PDF first.");
+        return;
+    }
+
+    // On mobile, open the actual PDF immediately with a real user gesture.
+    // This is more reliable and much clearer than canvas rendering.
+    if (isMobileDevice()) {
+        if (!openNativePDFFile(file)) {
+            showMobilePDFChoice(file);
+        }
         return;
     }
 
@@ -1349,11 +1421,20 @@ async function openSavedPDF(pdfId) {
         const file = stored instanceof File
             ? stored
             : new File([stored], savedPDF.name || "StudyBook.pdf",
-                { type: savedPDF.type || stored.type || "application/pdf" });
+                { type: savedPDF.type || stored.type || "application/pdf", lastModified: Date.now() });
+
+        // On mobile, first show a lightweight choice screen. The actual
+        // Read PDF button then opens the native PDF viewer from a direct
+        // user gesture, which works much better in mobile/in-app browsers.
+        if (isMobileDevice()) {
+            showMobilePDFChoice(file);
+            return;
+        }
 
         const url = URL.createObjectURL(file);
         window.studyBookCurrentPDFFile = file;
         window.studyBookCurrentPDFURL = url;
+        rememberPDFURL(url);
         openPDFViewerReliably(url, file);
     } catch (error) {
         console.error("Could not open saved PDF:", error);
@@ -1569,39 +1650,12 @@ function openCurrentPDFInBrowser() {
         return;
     }
 
-    try {
-        const openURL = window.studyBookCurrentPDFURL || URL.createObjectURL(file);
-        window.studyBookCurrentPDFURL = openURL;
-
-        // A real user-initiated anchor click is more reliable than
-        // window.open inside Messenger/in-app browsers.
-        const link = document.createElement("a");
-        link.href = openURL;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.style.display = "none";
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-
-        // If an in-app browser blocks the new tab, show a clear fallback
-        // instead of silently doing nothing.
-        setTimeout(function () {
-            if (/FBAN|FBAV|Messenger|Instagram/i.test(navigator.userAgent)) {
-                const note = document.createElement("div");
-                note.className = "pdf-app-note";
-                note.innerHTML = "If the PDF did not open, use your browser menu and choose <strong>Open in browser</strong>, then read the PDF there.";
-                const reader = getElement("mobilePdfReader");
-                if (reader && !reader.querySelector(".external-browser-note")) {
-                    note.classList.add("external-browser-note");
-                    reader.prepend(note);
-                }
-            }
-        }, 500);
-    } catch (e) {
-        console.error("Could not open PDF in browser:", e);
-        downloadFileObject(file);
+    if (openNativePDFFile(file)) {
+        return;
     }
+
+    // Last resort: download the real PDF file.
+    downloadFileObject(file);
 }
 
 async function openCurrentPDFWithApp() {
