@@ -2540,3 +2540,31 @@ html, body {
 #mainScreen:not(.hidden) {
     display: flex;
 }
+
+/* =========================================================
+   MOBILE PDF NATIVE-READER CHOICE
+   ========================================================= */
+.mobile-pdf-choice {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    gap: 12px;
+    width: min(92%, 520px);
+    margin: 0 auto;
+    padding: 24px 0;
+    box-sizing: border-box;
+}
+.mobile-pdf-choice .pdf-main-action {
+    width: 100%;
+    min-height: 48px;
+    font-size: 15px;
+}
+.pdf-choice-text {
+    margin: 0 0 8px;
+    text-align: center;
+    line-height: 1.6;
+    color: #374151;
+    font-size: 14px;
+}
