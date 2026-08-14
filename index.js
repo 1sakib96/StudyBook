@@ -1186,7 +1186,8 @@ function renderLibrary() {
     /* The library starts with two stories and automatically grows downward.
        This keeps a real bookshelf look without overflowing on mobile. */
     const isMobile = window.matchMedia && window.matchMedia("(max-width: 650px)").matches;
-    const booksPerShelf = isMobile ? 5 : 8;
+    const isTablet = window.matchMedia && window.matchMedia("(max-width: 1000px)").matches;
+    const booksPerShelf = isMobile ? 5 : (isTablet ? 8 : 13);
     const shelfCount = Math.max(2, Math.ceil(libraryBooks.length / booksPerShelf));
 
     let shelfMarkup = "";
@@ -1216,7 +1217,7 @@ function renderLibrary() {
                     onclick="event.stopPropagation(); deleteLibraryBook('${escapeAttribute(book.id)}')"
                     title="Delete book" aria-label="Delete book">×</button>
                 <span class="library-book-title">${escapeHTML(book.name || "Untitled Book")}</span>
-                <span class="library-book-pdf">PDF • READ</span>
+                <span class="library-book-number">${String(index + 1).padStart(2, "0")}</span>
             </div>
         `;
         tier.appendChild(wrap);
