@@ -1,6 +1,7 @@
 let currentSubjectId = null;
 let subjects = [];
 let student = null;
+let libraryBooks = [];
 
 document.addEventListener("DOMContentLoaded", function () {
 
@@ -32,6 +33,11 @@ function loadData() {
                 "studybook_subjects"
             );
 
+        const savedLibrary =
+            localStorage.getItem(
+                "studybook_library"
+            );
+
 
         /*
             No personal information is loaded.
@@ -52,7 +58,15 @@ function loadData() {
                 ? JSON.parse(savedSubjects)
                 : [];
 
+        libraryBooks =
+            savedLibrary
+                ? JSON.parse(savedLibrary)
+                : [];
+
+        if (!Array.isArray(libraryBooks)) libraryBooks = [];
+
         renderStudyDays();
+        renderLibrary();
 
 
         subjects.forEach(function (subject) {
@@ -91,6 +105,7 @@ function loadData() {
         student = null;
 
         subjects = [];
+        libraryBooks = [];
 
     }
 
@@ -237,6 +252,7 @@ async function resetEverything() {
     student = null;
 
     subjects = [];
+    libraryBooks = [];
 
     currentSubjectId = null;
 
@@ -330,6 +346,11 @@ function saveData() {
     localStorage.setItem(
         "studybook_subjects",
         JSON.stringify(subjects)
+    );
+
+    localStorage.setItem(
+        "studybook_library",
+        JSON.stringify(libraryBooks)
     );
 
 }
@@ -1126,6 +1147,254 @@ async function clearAllStoredPDFs() {
     } catch (error) {
         console.error("Could not clear PDF storage:", error);
     }
+}
+
+/* =========================================================
+   BOOK LIBRARY
+   ========================================================= */
+
+function saveLibraryData() {
+    localStorage.setItem("studybook_library", JSON.stringify(libraryBooks));
+}
+
+function renderLibrary() {
+    const shelf = getElement("libraryShelf");
+    if (!shelf) return;
+
+    if (!Array.isArray(libraryBooks) || libraryBooks.length === 0) {
+        shelf.innerHTML = `
+            <div class="library-empty">
+                <div class="library-empty-icon">📚</div>
+                <strong>Your bookshelf is empty</strong>
+                <p>Add a PDF book and it will appear here like a real bookshelf.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const bookColors = [
+        "linear-gradient(160deg,#6f5bd3,#4b3b9c)",
+        "linear-gradient(160deg,#d56b55,#9f3e2f)",
+        "linear-gradient(160deg,#4e9b83,#286a57)",
+        "linear-gradient(160deg,#d59b45,#9b6420)",
+        "linear-gradient(160deg,#5686b9,#31567d)",
+        "linear-gradient(160deg,#b65f8a,#7e355b)",
+        "linear-gradient(160deg,#7b9b52,#4d6c2e)",
+        "linear-gradient(160deg,#9b6d4b,#68452f)"
+    ];
+
+    /* The library starts with two stories and automatically grows downward.
+       This keeps a real bookshelf look without overflowing on mobile. */
+    const isMobile = window.matchMedia && window.matchMedia("(max-width: 650px)").matches;
+    const booksPerShelf = isMobile ? 5 : 8;
+    const shelfCount = Math.max(2, Math.ceil(libraryBooks.length / booksPerShelf));
+
+    let shelfMarkup = "";
+    for (let i = 0; i < shelfCount; i++) {
+        shelfMarkup += `
+            <div class="library-tier ${i === 0 ? "library-tier-top" : ""}">
+                <div class="library-tier-books" data-library-tier="${i}"></div>
+            </div>`;
+    }
+
+    shelf.innerHTML = shelfMarkup;
+    const tiers = shelf.querySelectorAll(".library-tier-books");
+
+    libraryBooks.forEach(function(book, index) {
+        const tierIndex = Math.floor(index / booksPerShelf);
+        const tier = tiers[Math.min(tierIndex, tiers.length - 1)];
+        const wrap = document.createElement("div");
+        wrap.className = "library-book-wrap";
+        wrap.innerHTML = `
+            <div class="library-book"
+                style="background:${bookColors[index % bookColors.length]}"
+                onclick="openLibraryBook('${escapeAttribute(book.id)}')"
+                role="button" tabindex="0"
+                onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openLibraryBook('${escapeAttribute(book.id)}')}"
+                title="Open ${escapeAttribute(book.name || 'Book')}">
+                <button class="library-book-delete"
+                    onclick="event.stopPropagation(); deleteLibraryBook('${escapeAttribute(book.id)}')"
+                    title="Delete book" aria-label="Delete book">×</button>
+                <span class="library-book-title">${escapeHTML(book.name || "Untitled Book")}</span>
+                <span class="library-book-pdf">PDF • READ</span>
+            </div>
+        `;
+        tier.appendChild(wrap);
+    });
+}
+
+function openLibraryAdd() {
+    window.studyBookLibraryFile = null;
+    showModal(`
+        <h2>📚 Add a Book</h2>
+        <p style="color:#777;font-size:13px;line-height:1.5;margin-bottom:14px;">
+            Choose a PDF and give it the name you want to see on your bookshelf.
+        </p>
+        <input type="text" id="libraryBookName" placeholder="Book name">
+        <input type="file" id="libraryBookFile" accept=".pdf,application/pdf" onchange="libraryBookFileSelected()">
+        <div id="libraryBookFileInfo" class="library-file-name">No PDF selected.</div>
+        <div class="library-modal-actions">
+            <button class="modal-action" onclick="saveLibraryBook()">💾 Save Book</button>
+            <button class="back-btn" style="width:100%;" onclick="closeModal()">← Back</button>
+        </div>
+    `);
+}
+
+function libraryBookFileSelected() {
+    const input = getElement("libraryBookFile");
+    const info = getElement("libraryBookFileInfo");
+    const nameInput = getElement("libraryBookName");
+    if (!input || !input.files || !input.files.length) return;
+
+    const file = input.files[0];
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+        alert("Please select a PDF file.");
+        input.value = "";
+        return;
+    }
+
+    window.studyBookLibraryFile = file;
+    if (info) info.textContent = "Selected PDF: " + file.name;
+    if (nameInput && !nameInput.value.trim()) {
+        nameInput.value = file.name.replace(/\.pdf$/i, "");
+    }
+}
+
+async function saveLibraryBook() {
+    const file = window.studyBookLibraryFile;
+    const nameInput = getElement("libraryBookName");
+    const name = nameInput ? nameInput.value.trim() : "";
+
+    if (!file) { alert("Please select a PDF book first."); return; }
+    if (!name) { alert("Enter a book name."); return; }
+
+    try {
+        const pdfId = "library-pdf-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10);
+        await storePDFFile(pdfId, file);
+        libraryBooks.push({
+            id: "book-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+            name: name,
+            pdfId: pdfId,
+            fileName: file.name,
+            createdAt: Date.now()
+        });
+        saveLibraryData();
+        renderLibrary();
+        closeModal();
+        alert("Book saved to your library.");
+    } catch (error) {
+        console.error("Could not save library book:", error);
+        alert("Could not save this book: " + (error.message || "Please try again."));
+    }
+}
+
+function openLibraryBook(bookId) {
+    const book = libraryBooks.find(function(item) { return String(item.id) === String(bookId); });
+    if (!book) return;
+
+    showModal(`
+        <h2>📖 ${escapeHTML(book.name)}</h2>
+        <p style="color:#777;font-size:13px;line-height:1.5;">
+            ${escapeHTML(book.fileName || "PDF book")}<br>
+            Your PDF is stored in StudyBook's local library.
+        </p>
+        <div class="library-modal-actions">
+            <button class="modal-action" onclick="openLibraryPDF('${escapeAttribute(book.pdfId)}')">📖 Read Book</button>
+            <button class="modal-action" onclick="renameLibraryBook('${escapeAttribute(book.id)}')">✏️ Rename Book</button>
+            <button class="modal-action" onclick="replaceLibraryPDF('${escapeAttribute(book.id)}')">📄 Replace / Add PDF</button>
+            <button class="back-btn" style="width:100%;" onclick="closeModal()">← Back to Bookshelf</button>
+        </div>
+    `);
+}
+
+async function openLibraryPDF(pdfId) {
+    try {
+        const saved = await getStoredPDF(String(pdfId));
+        if (!saved || !saved.file || !saved.file.size) throw new Error("The saved book PDF is unavailable.");
+        closeModal();
+        const url = URL.createObjectURL(saved.file);
+        window.studyBookCurrentPDFFile = saved.file;
+        window.studyBookCurrentPDFURL = url;
+        rememberPDFURL(url);
+        openPDFViewerReliably(url, saved.file);
+    } catch (error) {
+        console.error("Could not open library PDF:", error);
+        alert("Could not open this book: " + (error.message || "Please add the PDF again."));
+    }
+}
+
+function renameLibraryBook(bookId) {
+    const book = libraryBooks.find(function(item) { return String(item.id) === String(bookId); });
+    if (!book) return;
+    const nextName = prompt("Book name:", book.name || "");
+    if (nextName === null) return;
+    const clean = nextName.trim();
+    if (!clean) return;
+    book.name = clean;
+    saveLibraryData();
+    renderLibrary();
+    openLibraryBook(book.id);
+}
+
+function replaceLibraryPDF(bookId) {
+    const book = libraryBooks.find(function(item) { return String(item.id) === String(bookId); });
+    if (!book) return;
+    window.studyBookReplacingLibraryBookId = String(bookId);
+    showModal(`
+        <h2>📄 Add PDF to ${escapeHTML(book.name)}</h2>
+        <p style="color:#777;font-size:13px;">Choose a new PDF. It will replace the current PDF for this book.</p>
+        <input type="file" id="replaceLibraryFile" accept=".pdf,application/pdf" onchange="replaceLibraryPDFSelected()">
+        <div id="replaceLibraryInfo" class="library-file-name">No PDF selected.</div>
+        <div class="library-modal-actions">
+            <button class="modal-action" onclick="saveReplacementLibraryPDF()">💾 Save New PDF</button>
+            <button class="back-btn" style="width:100%;" onclick="openLibraryBook('${escapeAttribute(book.id)}')">← Back</button>
+        </div>
+    `);
+}
+
+function replaceLibraryPDFSelected() {
+    const input = getElement("replaceLibraryFile");
+    const info = getElement("replaceLibraryInfo");
+    if (!input || !input.files || !input.files.length) return;
+    const file = input.files[0];
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+        alert("Please select a PDF file."); input.value = ""; return;
+    }
+    window.studyBookLibraryReplacementFile = file;
+    if (info) info.textContent = "Selected: " + file.name;
+}
+
+async function saveReplacementLibraryPDF() {
+    const bookId = window.studyBookReplacingLibraryBookId;
+    const file = window.studyBookLibraryReplacementFile;
+    const book = libraryBooks.find(function(item) { return String(item.id) === String(bookId); });
+    if (!book || !file) { alert("Please select a PDF first."); return; }
+
+    try {
+        const newPdfId = "library-pdf-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10);
+        await storePDFFile(newPdfId, file);
+        const oldPdfId = book.pdfId;
+        book.pdfId = newPdfId;
+        book.fileName = file.name;
+        saveLibraryData();
+        try { await deleteStoredPDF(oldPdfId); } catch (e) { console.warn("Old library PDF cleanup failed", e); }
+        window.studyBookLibraryReplacementFile = null;
+        renderLibrary();
+        openLibraryBook(book.id);
+    } catch (error) {
+        console.error(error);
+        alert("Could not replace the PDF: " + (error.message || "Please try again."));
+    }
+}
+
+async function deleteLibraryBook(bookId) {
+    const book = libraryBooks.find(function(item) { return String(item.id) === String(bookId); });
+    if (!book) return;
+    if (!confirm("Remove this book and its saved PDF from your library?")) return;
+    try { await deleteStoredPDF(book.pdfId); } catch (e) { console.warn(e); }
+    libraryBooks = libraryBooks.filter(function(item) { return String(item.id) !== String(bookId); });
+    saveLibraryData();
+    renderLibrary();
 }
 
 /* =========================================================
