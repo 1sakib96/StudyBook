@@ -217,8 +217,10 @@ body {
     width: 260px;
     min-width: 260px;
     min-height: 100vh;
-    background: rgba(230, 227, 227, 0.94);
-    border-right: 1px solid #e6e8ef;
+    background: linear-gradient(165deg, #172554 0%, #263a72 42%, #344b83 72%, #1e293b 100%);
+    border-right: 1px solid rgba(255,255,255,.12);
+    box-shadow: 8px 0 28px rgba(15,23,42,.12);
+    color: #f8fafc;
     display: flex;
     flex-direction: column;
     padding: 25px 16px;
@@ -242,7 +244,8 @@ body {
 
 .sidebar-user {
     padding: 15px;
-    background: #f4f6ff;
+    background: rgba(255,255,255,.10);
+    border: 1px solid rgba(255,255,255,.12);
     border-radius: 15px;
     display: flex;
     align-items: center;
@@ -254,7 +257,7 @@ body {
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background: white;
+    background: rgba(255,255,255,.94);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -267,7 +270,7 @@ body {
 }
 
 .sidebar-user small {
-    color: #7c8190;
+    color: #cbd5e1;
     font-size: 11px;
 }
 
@@ -289,14 +292,25 @@ body {
     gap: 13px;
     cursor: pointer;
     font-size: 14px;
-    color: #5e6372;
+    color: #dbeafe;
     text-align: left;
     transition: 0.2s;
+    border: 1px solid transparent;
 }
 
+.sidebar-menu button:hover,
+.sidebar-menu button.sidebar-schedule-link {
+    background: rgba(255,255,255,.10);
+    color: #ffffff;
+}
 .sidebar-menu button:hover {
-    background: #edf1ff;
-    color: #4d5ee7;
+    background: rgba(129,160,255,.22);
+    border-color: rgba(191,219,254,.18);
+    transform: translateX(2px);
+}
+.sidebar-menu button.sidebar-schedule-link {
+    background: linear-gradient(100deg, rgba(129,140,248,.35), rgba(56,189,248,.16));
+    border-color: rgba(199,210,254,.24);
 }
 
 .sidebar-bottom {
@@ -304,8 +318,9 @@ body {
 }
 
 .exit-btn {
-    color: #d14b5d;
-    background: #fff1f3;
+    color: #fecdd3;
+    background: rgba(244,63,94,.14);
+    border: 1px solid rgba(251,113,133,.18);
 }
 
 .exit-btn:hover {
@@ -3240,3 +3255,69 @@ html, body {
     .library-book-number { left: 6px; right: 6px; bottom: 5px; font-size: 8px; padding: 1px 2px; }
     .library-book-delete { width: 15px; height: 15px; line-height: 15px; font-size: 10px; top: 2px; right: 2px; }
 }
+
+
+/* =========================================================
+   SCHEDULES & TO-DO LIST (added section)
+   ========================================================= */
+.schedule-section {
+    margin-top: 28px;
+    padding: clamp(20px, 3vw, 30px);
+    border: 1px solid #e3e7f3;
+    border-radius: 24px;
+    background: linear-gradient(135deg, #ffffff 0%, #f7f8ff 65%, #f0f3ff 100%);
+    box-shadow: 0 12px 34px rgba(46, 57, 112, .07);
+}
+.schedule-header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; }
+.schedule-eyebrow { font-size:10px; letter-spacing:2px; font-weight:800; color:#6571e8; margin-bottom:7px; }
+.schedule-header h2 { font-size:clamp(21px, 3vw, 27px); color:#202541; margin-bottom:7px; }
+.schedule-header p, .task-list-heading p { color:#7c8298; font-size:13px; line-height:1.5; }
+.schedule-header-icon { display:grid; place-items:center; width:54px; height:54px; flex-shrink:0; border-radius:18px; color:white; font-size:26px; background:linear-gradient(135deg,#6675f0,#8b5cf6); box-shadow:0 8px 18px #7b7df044; }
+.task-form { display:grid; grid-template-columns:minmax(180px,1.6fr) minmax(130px,1fr) minmax(110px,.8fr) auto; align-items:end; gap:12px; padding:17px; background:white; border:1px solid #e8eaf4; border-radius:17px; }
+.task-form label { display:flex; flex-direction:column; gap:7px; color:#5d637b; font-size:12px; font-weight:700; }
+.task-form input { width:100%; min-width:0; height:43px; border:1px solid #e0e4f0; border-radius:10px; padding:0 11px; color:#282d46; background:#fbfcff; outline:none; font:inherit; font-size:13px; }
+.task-form input:focus { border-color:#7884f3; box-shadow:0 0 0 3px #7884f31c; }
+.task-add-btn { height:43px; padding:0 17px; border:0; border-radius:11px; background:#5968e9; color:white; font-weight:700; cursor:pointer; white-space:nowrap; transition:transform .2s,background .2s; }
+.task-add-btn:hover { background:#4655d6; transform:translateY(-1px); }
+.task-list-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:25px 0 13px; }
+.task-list-heading h3 { color:#292e48; font-size:16px; margin-bottom:5px; }
+.task-count { border-radius:20px; padding:7px 11px; color:#5865d8; background:#e9ecff; font-size:11px; font-weight:800; white-space:nowrap; }
+.scheduled-task-list { display:grid; gap:10px; }
+.scheduled-task { display:flex; align-items:center; gap:13px; padding:14px 15px; border:1px solid #e9ebf4; border-radius:14px; background:rgba(255,255,255,.9); }
+.task-date-badge { width:45px; min-width:45px; min-height:48px; display:flex; flex-direction:column; justify-content:center; align-items:center; border-radius:12px; background:#eef0ff; color:#5d68df; }
+.task-date-badge strong { font-size:17px; line-height:1.1; }
+.task-date-badge span { margin-top:4px; font-size:9px; font-weight:800; text-transform:uppercase; }
+.task-details { flex:1; min-width:0; }
+.task-details strong { display:block; overflow-wrap:anywhere; color:#30344e; font-size:14px; margin-bottom:5px; }
+.task-details span { color:#81869a; font-size:11px; }
+.task-status { display:inline-block; margin-top:6px; padding:3px 7px; border-radius:6px; color:#8a6418; background:#fff4d8; font-size:10px; font-weight:700; }
+.task-status.done { color:#16805b; background:#e0f7ed; }
+.task-delete-btn { width:32px; height:32px; flex-shrink:0; border:0; border-radius:9px; background:#fff0f2; color:#c64e66; cursor:pointer; font-size:18px; }
+.task-delete-btn:hover { background:#ffe0e6; }
+.task-empty { text-align:center; padding:27px 15px; border:1px dashed #d9deef; border-radius:14px; color:#8a90a4; background:#ffffff9c; font-size:13px; }
+.task-reminder-overlay { position:fixed; inset:0; z-index:3000; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(22,27,51,.62); backdrop-filter:blur(5px); }
+.task-reminder-card { width:100%; max-width:420px; padding:30px; border-radius:24px; background:white; text-align:center; box-shadow:0 25px 90px #10152e55; animation:taskReminderIn .25s ease-out; }
+.task-reminder-icon { width:66px; height:66px; margin:0 auto 17px; display:grid; place-items:center; border-radius:22px; background:#eef0ff; font-size:32px; }
+.task-reminder-card h2 { color:#252a46; font-size:23px; margin-bottom:9px; }
+.task-reminder-card p { color:#737991; font-size:14px; line-height:1.6; overflow-wrap:anywhere; }
+.task-reminder-time { margin:17px 0 20px; padding:11px; border-radius:11px; background:#f6f7ff; color:#5865d8; font-size:12px; font-weight:700; }
+.task-reminder-ok { width:100%; height:46px; border:0; border-radius:12px; background:#5968e9; color:white; font-weight:800; font-size:14px; cursor:pointer; }
+.task-reminder-ok:hover { background:#4655d6; }
+@keyframes taskReminderIn { from { opacity:0; transform:translateY(10px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
+@media(max-width:850px) { .task-form { grid-template-columns:1fr 1fr; } .task-form label:first-child { grid-column:1/-1; } .task-add-btn { width:100%; } }
+@media(max-width:520px) { .schedule-section { padding:17px 12px; border-radius:18px; } .schedule-header-icon { width:44px; height:44px; border-radius:14px; } .task-form { grid-template-columns:1fr; padding:13px; } .task-form label:first-child { grid-column:auto; } .task-add-btn { width:100%; } .scheduled-task { padding:11px 9px; gap:9px; } .task-date-badge { width:40px; min-width:40px; } .task-details strong { font-size:13px; } }
+
+/* Schedule navigation feedback */
+.schedule-section-highlight { animation: scheduleSectionPulse 1.5s ease; }
+@keyframes scheduleSectionPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); } 35% { box-shadow: 0 0 0 5px rgba(99,102,241,.22); } }
+.sidebar-schedule-link { margin-top: 3px; }
+
+/* Grouped due-task reminder messages */
+.task-reminder-card { max-height: min(86vh, 760px); overflow-y: auto; }
+.task-reminder-subtitle { margin: 0 0 18px; }
+.task-reminder-list { display:flex; flex-direction:column; gap:10px; margin:0 0 20px; text-align:left; }
+.task-reminder-item { display:flex; align-items:flex-start; gap:12px; padding:13px; border:1px solid #e7e9fb; border-radius:14px; background:linear-gradient(135deg,#fafaff,#f4f6ff); }
+.task-reminder-number { flex:0 0 28px; width:28px; height:28px; display:grid; place-items:center; border-radius:9px; background:#5968e9; color:#fff; font-size:12px; font-weight:800; }
+.task-reminder-message { min-width:0; flex:1; }
+.task-reminder-message p { margin:2px 0 0; color:#252a46; font-size:14px; font-weight:750; }
+.task-reminder-message .task-reminder-time { margin:8px 0 0; padding:7px 9px; }
