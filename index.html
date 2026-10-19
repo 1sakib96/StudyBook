@@ -142,6 +142,11 @@
                     <span>Settings</span>
                 </button>
 
+                <button onclick="openSchedules()" class="sidebar-schedule-link">
+                    🗓️
+                    <span>Schedules &amp; To-do</span>
+                </button>
+
             </nav>
 
 
@@ -341,6 +346,36 @@
 
                     <div id="libraryShelf" class="library-shelf" aria-label="Book library"></div>
 
+                </section>
+
+
+                <!-- SCHEDULES & TO-DO LIST -->
+                <section class="schedule-section" aria-labelledby="scheduleTitle">
+                    <div class="schedule-header">
+                        <div>
+                            <p class="schedule-eyebrow">STAY ON TRACK</p>
+                            <h2 id="scheduleTitle">🗓️ Schedules &amp; To-do List</h2>
+                            <p>Plan your study sessions and get a reminder when it’s time.</p>
+                        </div>
+                        <span class="schedule-header-icon" aria-hidden="true">✓</span>
+                    </div>
+                    <form class="task-form" onsubmit="addScheduledTask(event)">
+                        <label>Task title
+                            <input id="taskTitle" type="text" maxlength="120" placeholder="e.g. Revise Chapter 3" required>
+                        </label>
+                        <label>Date
+                            <input id="taskDate" type="date" required>
+                        </label>
+                        <label>Time
+                            <input id="taskTime" type="time" required>
+                        </label>
+                        <button class="task-add-btn" type="submit">＋ Add task</button>
+                    </form>
+                    <div class="task-list-heading">
+                        <div><h3>Your upcoming tasks</h3><p>Reminders appear here when they’re due.</p></div>
+                        <span id="taskCount" class="task-count">0 tasks</span>
+                    </div>
+                    <div id="scheduledTaskList" class="scheduled-task-list"></div>
                 </section>
 
 
