@@ -7,6 +7,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
     loadData();
 
+    // Initialize reminders as soon as the page is ready, then keep checking
+    // while the website remains open so reminders fire at the scheduled time.
+    renderScheduledTasks();
+    checkScheduledTasks();
+    window.setInterval(checkScheduledTasks, 1000);
+
     showNewUser();
 
 });
@@ -3281,4 +3287,139 @@ function escapeAttribute(value) {
 
     return escapeHTML(value);
 
+}
+
+
+function openSchedules() {
+    const section = document.querySelector(".schedule-section");
+    if (section) {
+        section.scrollIntoView({ behavior: "smooth", block: "start" });
+        section.classList.remove("schedule-section-highlight");
+        void section.offsetWidth;
+        section.classList.add("schedule-section-highlight");
+        window.setTimeout(function() { section.classList.remove("schedule-section-highlight"); }, 1600);
+    }
+    if (typeof closeSidebarOnMobile === "function") closeSidebarOnMobile();
+}
+
+/* =========================================================
+   SCHEDULES & TO-DO LIST
+   ========================================================= */
+function getScheduledTasks() {
+    try {
+        const saved = localStorage.getItem("studybook_scheduled_tasks");
+        return saved ? JSON.parse(saved) : [];
+    } catch (error) { return []; }
+}
+
+function saveScheduledTasks(tasks) {
+    localStorage.setItem("studybook_scheduled_tasks", JSON.stringify(tasks));
+}
+
+function addScheduledTask(event) {
+    if (event) event.preventDefault();
+    const title = getElement("taskTitle").value.trim();
+    const date = getElement("taskDate").value;
+    const time = getElement("taskTime").value;
+    if (!title || !date || !time) return;
+    const scheduledAt = new Date(date + "T" + time);
+    if (Number.isNaN(scheduledAt.getTime())) { alert("Please choose a valid date and time."); return; }
+    const tasks = getScheduledTasks();
+    tasks.push({ id: Date.now(), title: title, date: date, time: time, completed: false, alerted: false });
+    tasks.sort(function(a, b) { return (a.date + "T" + a.time).localeCompare(b.date + "T" + b.time); });
+    saveScheduledTasks(tasks);
+    getElement("taskTitle").value = "";
+    getElement("taskDate").value = "";
+    getElement("taskTime").value = "";
+    renderScheduledTasks();
+    checkScheduledTasks();
+}
+
+function renderScheduledTasks() {
+    const list = getElement("scheduledTaskList");
+    const count = getElement("taskCount");
+    if (!list) return;
+    const tasks = getScheduledTasks().sort(function(a, b) {
+        return (a.date + "T" + a.time).localeCompare(b.date + "T" + b.time);
+    });
+    if (count) count.textContent = tasks.length + (tasks.length === 1 ? " task" : " tasks");
+    if (!tasks.length) {
+        list.innerHTML = '<div class="task-empty">✨ Your schedule is clear. Add a task above to get started.</div>';
+        return;
+    }
+    list.innerHTML = tasks.map(function(task) {
+        const date = new Date(task.date + "T00:00:00");
+        const day = date.toLocaleDateString(undefined, { day: "2-digit" });
+        const month = date.toLocaleDateString(undefined, { month: "short" });
+        const time = new Date("2000-01-01T" + task.time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+        return '<div class="scheduled-task">' +
+            '<div class="task-date-badge"><strong>' + day + '</strong><span>' + escapeHTML(month) + '</span></div>' +
+            '<div class="task-details"><strong>' + escapeHTML(task.title) + '</strong><span>📅 ' + escapeHTML(formatStudyDate(task.date)) + ' &nbsp;·&nbsp; 🕒 ' + escapeHTML(time) + '</span>' +
+            (task.completed ? '<div class="task-status done">✓ Completed</div>' : (task.alerted ? '<div class="task-status">Reminder shown</div>' : '')) +
+            '</div><button class="task-delete-btn" onclick="deleteScheduledTask(' + Number(task.id) + ')" aria-label="Delete task" title="Delete task">×</button></div>';
+    }).join("");
+}
+
+function deleteScheduledTask(id) {
+    saveScheduledTasks(getScheduledTasks().filter(function(task) { return task.id !== id; }));
+    renderScheduledTasks();
+}
+
+function checkScheduledTasks() {
+    // Show every task that is due in one reminder window, including tasks that
+    // became due while the website was closed. The interval is started on page load.
+    if (document.getElementById("taskReminderOverlay")) return;
+    const now = Date.now();
+    const tasks = getScheduledTasks();
+    const due = tasks.filter(function(task) {
+        const scheduledAt = new Date(task.date + "T" + task.time).getTime();
+        return !task.completed && !task.alerted && Number.isFinite(scheduledAt) && scheduledAt <= now;
+    }).sort(function(a, b) {
+        return (a.date + "T" + a.time).localeCompare(b.date + "T" + b.time);
+    });
+    if (!due.length) return;
+
+    const dueIds = due.map(function(task) { return Number(task.id); });
+    tasks.forEach(function(task) {
+        if (dueIds.indexOf(Number(task.id)) !== -1) task.alerted = true;
+    });
+    saveScheduledTasks(tasks);
+    renderScheduledTasks();
+    showTaskReminder(due);
+}
+
+function showTaskReminder(dueTasks) {
+    // Accept a single task too, for compatibility with any older callers.
+    const tasks = Array.isArray(dueTasks) ? dueTasks : [dueTasks];
+    const overlay = document.createElement("div");
+    overlay.id = "taskReminderOverlay";
+    overlay.className = "task-reminder-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-labelledby", "taskReminderTitle");
+    const taskMessages = tasks.map(function(task, index) {
+        const when = formatStudyDate(task.date) + " · " + new Date("2000-01-01T" + task.time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+        return '<div class="task-reminder-item"><span class="task-reminder-number">' + (index + 1) + '</span><div class="task-reminder-message"><p>' + escapeHTML(task.title) + '</p><div class="task-reminder-time">📅 ' + escapeHTML(when) + '</div></div></div>';
+    }).join("");
+    overlay.innerHTML = '<div class="task-reminder-card"><div class="task-reminder-icon">🔔</div><h2 id="taskReminderTitle">' + (tasks.length === 1 ? 'Time for your task!' : 'Your tasks are due!') + '</h2><p class="task-reminder-subtitle">' + (tasks.length === 1 ? 'Here is your scheduled reminder.' : 'You have ' + tasks.length + ' tasks waiting for you.') + '</p><div class="task-reminder-list">' + taskMessages + '</div><button class="task-reminder-ok" onclick="acknowledgeTaskReminder(' + JSON.stringify(tasks.map(function(task) { return Number(task.id); })) + ')">OK, got it</button></div>';
+    document.body.appendChild(overlay);
+    const ok = overlay.querySelector("button");
+    if (ok) ok.focus();
+    // Optional OS notifications; the in-page popup works without permission.
+    if ("Notification" in window && Notification.permission === "granted") {
+        tasks.forEach(function(task) {
+            try { new Notification("StudyBook reminder", { body: task.title }); } catch (error) {}
+        });
+    }
+}
+
+function acknowledgeTaskReminder(ids) {
+    // Dismissing a reminder only acknowledges the message; it does not mark the
+    // task complete. A task can still be checked off separately in the schedule.
+    const taskIds = Array.isArray(ids) ? ids.map(Number) : [Number(ids)];
+    const overlay = getElement("taskReminderOverlay");
+    if (overlay) overlay.remove();
+    renderScheduledTasks();
+    // Any other newly-due reminders are picked up immediately.
+    checkScheduledTasks();
 }
